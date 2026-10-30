@@ -1,0 +1,18 @@
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+
+.env
+.env.*
+.jwt_secret
+.audit_secret
+
+*.db
+*.sqlite
+*.sqlite3
+
+.DS_Store
+# Arena export copies
+SpiderSenseForArena/
+SpiderSenseForArena.zip

@@ -1,0 +1,40 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f4f6f8;
+}
+
+h1 {
+  text-align: center;
+  color: #1f2937;
+  padding: 15px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 15px;
+  background: white;
+}
+
+.filters label {
+  font-weight: bold;
+}
+
+.filters select {
+  margin-left: 8px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.filters span {
+  color: #555;
+}

@@ -1,0 +1,37 @@
+erDiagram
+    USERS ||--o{ INCIDENTS : "reports (citizen_id)"
+    USERS |o--o{ INCIDENTS : "claims (hero_id nullable)"
+    USERS ||--o{ STATUS_HISTORY : "performs (actor_id)"
+    INCIDENTS ||--o{ STATUS_HISTORY : "has"
+
+    USERS {
+        int id PK
+        string email UK
+        string password_hash
+        string role
+    }
+
+    INCIDENTS {
+        int id PK
+        int citizen_id FK
+        int hero_id FK "nullable"
+        string title
+        text description
+        string category
+        int severity
+        float latitude
+        float longitude
+        string status
+        datetime created_at
+        datetime updated_at
+    }
+
+    STATUS_HISTORY {
+        int id PK
+        int incident_id FK
+        int actor_id FK
+        string previous_status "nullable"
+        string next_status
+        text note "nullable"
+        datetime created_at
+    }
