@@ -6,8 +6,8 @@ from app.security import hash_password
 
 
 TEST_HEROES = [
-    ("hero1@example.com", "HeroOne123!"),
-    ("hero2@example.com", "HeroTwo123!")
+    ("hero1@gmail.com", "hero1"),
+    ("hero2@gmail.com", "hero2")
 ]
 
 
