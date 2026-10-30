@@ -1040,3 +1040,17 @@ def command_verify_incident(
         db,
         incident_id,
     )
+
+@app.get('/incidents/{incident_id}/history', response_model=list[StatusHistoryResponse])
+def citizen_incident_history(incident_id: int, current_user: User = Depends(require_citizen), db: Session = Depends(get_db)):
+    """Return history only to the citizen who created the incident."""
+    incident = db.scalar(select(Incident).where(Incident.id == incident_id, Incident.citizen_id == current_user.id))
+    if incident is None:
+        raise HTTPException(status_code=404, detail='Incident not found')
+    return db.scalars(select(StatusHistory).where(StatusHistory.incident_id == incident_id).order_by(StatusHistory.created_at, StatusHistory.id)).all()
+
+
+@app.get('/hero/my-incidents', response_model=list[IncidentResponse])
+def hero_my_incidents(current_user: User = Depends(require_hero), db: Session = Depends(get_db)):
+    """Return only incidents claimed by this hero, including resolved ones."""
+    return db.scalars(select(Incident).where(Incident.hero_id == current_user.id).order_by(Incident.created_at.desc(), Incident.id.desc())).all()
