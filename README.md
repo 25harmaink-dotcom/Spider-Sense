@@ -224,3 +224,7 @@ Swagger's **Authorize** control may be used for each role sequentially; use a fr
 - `requirements.txt` does not declare the test-only packages `pytest` and `httpx`.
 - The supplied `schemas.py` contains duplicate schema declarations and an unrelated test function; cleanup is advisable, but no behavior was changed for this documentation task.
 - Current automated suite has no Command authorization test.
+
+## Cinematic frontend
+
+The React/Vite frontend now provides the cinematic landing page and Citizen, Hero, and Command dashboards. For setup, local proxy configuration, credentials, limitations, and tests, see [frontend/README.md](frontend/README.md). Two additional role-scoped read endpoints support citizen history (`GET /incidents/{id}/history`) and a hero's own missions (`GET /hero/my-incidents`).

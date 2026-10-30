@@ -612,11 +612,12 @@ def test_valid_status_lifecycle_and_history(test_client):
 
     history = history_response.json()
 
-    # ASSERTION 1: Exactly three transitions
-    assert len(history) == 3
+    # ASSERTION 1: The report and three hero transitions are recorded
+    assert len(history) == 4
 
     # ASSERTION 2: Correct transition sequence
     assert [entry["next_status"] for entry in history] == [
+        "reported",
         "claimed",
         "in_progress",
         "resolved"
@@ -625,7 +626,7 @@ def test_valid_status_lifecycle_and_history(test_client):
     # ASSERTION 3: All actions performed by Hero
     assert all(
         entry["actor_id"] == hero_id
-        for entry in history
+        for entry in history[1:]
     )
 
     # ASSERTION 4: Every event has a timestamp
@@ -916,3 +917,31 @@ def test_citizen_data_isolation_with_filters(test_client):
     ]
 
     assert citizen_b_incident_id not in returned_ids    
+
+def test_frontend_history_and_hero_missions_are_scoped(test_client):
+    """The added dashboard endpoints must enforce ownership and role boundaries."""
+    for email in ('owner@example.com', 'other@example.com'):
+        assert test_client.post('/auth/register', json={'email': email, 'password': 'Password123!'}).status_code == 201
+    def login(email):
+        r = test_client.post('/auth/login', json={'email': email, 'password': 'Password123!'})
+        assert r.status_code == 200
+        return {'Authorization': f"Bearer {r.json()['access_token']}"}
+    owner, other = login('owner@example.com'), login('other@example.com')
+    with TestingSessionLocal() as db:
+        db.add_all([User(email='hero-a@example.com', password_hash=hash_password('Password123!'), role='hero'), User(email='hero-b@example.com', password_hash=hash_password('Password123!'), role='hero')])
+        db.commit()
+    hero, other_hero = login('hero-a@example.com'), login('hero-b@example.com')
+    incident = test_client.post('/incidents', headers=owner, json={'title':'Test incident','description':'A detailed test report','category':'Test','severity':3,'latitude':21.1,'longitude':79.1})
+    assert incident.status_code == 201
+    incident_id = incident.json()['id']
+    assert test_client.get(f'/incidents/{incident_id}/history', headers=owner).json()[0]['next_status'] == 'reported'
+    assert test_client.get(f'/incidents/{incident_id}/history', headers=other).status_code == 404
+    assert test_client.get(f'/incidents/{incident_id}/history', headers=hero).status_code == 403
+    assert test_client.get('/hero/my-incidents', headers=owner).status_code == 403
+    assert test_client.post(f'/hero/incidents/{incident_id}/claim', headers=hero).status_code == 200
+    assert test_client.post(f'/hero/incidents/{incident_id}/claim', headers=other_hero).status_code == 409
+    assert [item['id'] for item in test_client.get('/hero/my-incidents', headers=hero).json()] == [incident_id]
+    assert test_client.get('/hero/my-incidents', headers=other_hero).json() == []
+    for status in ('in_progress', 'resolved'):
+        assert test_client.patch(f'/hero/incidents/{incident_id}/status', headers=hero, json={'status':status}).status_code == 200
+    assert [h['next_status'] for h in test_client.get(f'/incidents/{incident_id}/history', headers=owner).json()] == ['reported','claimed','in_progress','resolved']

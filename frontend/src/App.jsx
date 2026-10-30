@@ -1,328 +1,71 @@
-import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import Login from "./Login";
+import { useEffect, useState } from 'react'
+import './App.css'
 
-// Backend API URL
-const API_URL = "http://127.0.0.1:8000";
+const statusLabel = s => (s || '').replaceAll('_', ' ')
+const time = v => v ? new Date(v.endsWith('Z') ? v : v + 'Z').toLocaleString() : '—'
+const emptyForm = { title: '', description: '', category: '', severity: '3', latitude: '', longitude: '' }
 
-// Determine marker color based on severity
-function getSeverityColor(severity) {
-  if (severity <= 2) return "#22c55e"; // Green
-  if (severity === 3) return "#eab308"; // Yellow
-  return "#ef4444"; // Red
-}
-
-// Create colored map markers
-function createMarkerIcon(severity) {
-  const color = getSeverityColor(severity);
-
-  return L.divIcon({
-    className: "",
-    html: `
-      <div style="
-        background-color: ${color};
-        width: 28px;
-        height: 28px;
-        border: 3px solid white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: bold;
-        box-shadow: 0 2px 6px #000;
-      ">
-        !
-      </div>
-    `,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
-}
-
-function App() {
-  // Authentication
-  const [token, setToken] = useState(null);
-
-  // Incidents from FastAPI
-  const [incidents, setIncidents] = useState([]);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  // Filters
-  const [severityFilter, setSeverityFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-
-  // Fetch real incidents when Hero logs in
-  useEffect(() => {
-    if (!token) {
-      return;
-    }
-
-    const controller = new AbortController();
-
-    async function fetchIncidents() {
-      setLoading(true);
-      setError("");
-
-      try {
-        const response = await fetch(`${API_URL}/hero/incidents`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          signal: controller.signal,
-        });
-
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(
-            "Access denied. Please log in with a valid Hero account."
-          );
-        }
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch incidents from the backend.");
-        }
-
-        const data = await response.json();
-
-        // Handle array or paginated response
-        const incidentList = Array.isArray(data)
-          ? data
-          : data.items ?? [];
-
-        if (!controller.signal.aborted) {
-          setIncidents(incidentList);
-        }
-      } catch (err) {
-        if (err.name !== "AbortError" && !controller.signal.aborted) {
-          setError(err.message);
-          setIncidents([]);
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    fetchIncidents();
-
-    return () => controller.abort();
-  }, [token]);
-
-  // Filter incidents
-  const filteredIncidents = incidents.filter((incident) => {
-    const matchesCategory =
-      categoryFilter === "all" ||
-      incident.category?.toLowerCase() === categoryFilter.toLowerCase();
-
-    let matchesSeverity = true;
-
-    if (severityFilter === "low") {
-      matchesSeverity = incident.severity <= 2;
-    } else if (severityFilter === "medium") {
-      matchesSeverity = incident.severity === 3;
-    } else if (severityFilter === "high") {
-      matchesSeverity = incident.severity >= 4;
-    }
-
-    return matchesCategory && matchesSeverity;
-  });
-
-  // Show login page before authentication
-  if (!token) {
-    return <Login onLogin={setToken} />;
+async function request(path, { token, body, method = 'GET', signal } = {}) {
+  let response
+  try {
+    response = await fetch(`/api${path}`, { method, signal, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
+  } catch (error) {
+    if (error.name === 'AbortError') throw error
+    throw new Error('Cannot reach the server. Check that the FastAPI backend is running.')
   }
-
-  // Logout
-  function handleLogout() {
-    setToken(null);
-    setIncidents([]);
-    setError("");
-    setSeverityFilter("all");
-    setCategoryFilter("all");
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const detail = Array.isArray(data.detail) ? data.detail.map(x => `${x.loc?.at(-1) || 'Field'}: ${x.msg}`).join('; ') : data.detail
+    const error = new Error(detail || `Request failed (${response.status}).`)
+    error.status = response.status
+    throw error
   }
-
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: "#0f172a",
-        color: "#f8fafc",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      {/* Header */}
-      <header
-        style={{
-          padding: "20px",
-          backgroundColor: "#1e293b",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "12px",
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: "24px", color: "#f8fafc" }}>
-          🕷️ Spider-Sense Alert System — NYC
-        </h1>
-
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: "#dc2626",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-          }}
-        >
-          Logout
-        </button>
-      </header>
-
-      {/* Loading message */}
-      {loading && (
-        <p style={{ textAlign: "center", padding: "10px" }}>
-          Loading incidents from FastAPI...
-        </p>
-      )}
-
-      {/* Error message */}
-      {error && (
-        <p
-          role="alert"
-          style={{
-            textAlign: "center",
-            color: "#fca5a5",
-            padding: "10px",
-          }}
-        >
-          {error}
-        </p>
-      )}
-
-      {/* Filters */}
-      <div
-        className="filters"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "20px",
-          flexWrap: "wrap",
-          padding: "15px",
-          backgroundColor: "#1e293b",
-          color: "#f8fafc",
-        }}
-      >
-        <label>
-          Severity:{" "}
-          <select
-            value={severityFilter}
-            onChange={(e) => setSeverityFilter(e.target.value)}
-            style={{
-              padding: "8px",
-              backgroundColor: "#334155",
-              color: "white",
-              border: "1px solid #475569",
-              borderRadius: "5px",
-            }}
-          >
-            <option value="all">All Severities</option>
-            <option value="low">Low (1–2)</option>
-            <option value="medium">Medium (3)</option>
-            <option value="high">High (4–5)</option>
-          </select>
-        </label>
-
-        <label>
-          Category:{" "}
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            style={{
-              padding: "8px",
-              backgroundColor: "#334155",
-              color: "white",
-              border: "1px solid #475569",
-              borderRadius: "5px",
-            }}
-          >
-            <option value="all">All Categories</option>
-            <option value="Fire">Fire</option>
-            <option value="Accident">Accident</option>
-            <option value="Utility">Utility</option>
-          </select>
-        </label>
-
-        <span>
-          Showing {filteredIncidents.length} of {incidents.length} incidents
-        </span>
-      </div>
-
-      {/* NYC Map */}
-      <MapContainer
-        center={[40.7128, -74.006]}
-        zoom={12}
-        style={{
-          height: "75vh",
-          width: "100%",
-        }}
-      >
-        <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        {filteredIncidents
-          .filter(
-            (incident) =>
-              Number.isFinite(Number(incident.latitude)) &&
-              Number.isFinite(Number(incident.longitude)) &&
-              incident.latitude !== null &&
-              incident.longitude !== null
-          )
-          .map((incident) => (
-            <Marker
-              key={incident.id}
-              position={[
-                Number(incident.latitude),
-                Number(incident.longitude),
-              ]}
-              icon={createMarkerIcon(incident.severity)}
-            >
-              <Popup>
-                <strong>{incident.title}</strong>
-                <br />
-                Category: {incident.category}
-                <br />
-                Severity: {incident.severity}/5
-                <br />
-                Status: {incident.status}
-              </Popup>
-            </Marker>
-          ))}
-      </MapContainer>
-
-      {/* Footer */}
-      <footer
-        style={{
-          textAlign: "center",
-          padding: "15px",
-          backgroundColor: "#1e293b",
-          color: "#94a3b8",
-        }}
-      >
-        Spider-Sense Alert System | New York City Emergency Monitoring
-      </footer>
-    </div>
-  );
+  return data
 }
 
-export default App;
+function Brand({ onClick }) { return <button className="brand" onClick={onClick} aria-label="Spider-Sense home"><span className="brand-icon">✳</span><span>SPIDER<span className="red">-</span>SENSE<small>THE CITY IS CALLING</small></span></button> }
+function Nav({ user, onHome, onLogin, onLogout }) { return <header className="nav"><Brand onClick={onHome}/><div className="nav-right">{!user && <><a href="#how" onClick={onHome}>HOW IT WORKS</a><a href="#about" onClick={onHome}>ABOUT</a></>}{user ? <><span className="nav-user">● &nbsp;{user.role.toUpperCase()} / {user.email}</span><button className="nav-button" onClick={onLogout}>LOG OUT <span>↗</span></button></> : <button className="nav-button" onClick={onLogin}>LOG IN <span>↗</span></button>}</div></header> }
+function Activation({ onDone }) {
+  useEffect(() => { const timer = setTimeout(onDone, 2200); return () => clearTimeout(timer) }, [onDone])
+  return <div className="activation" role="status"><div className="activation-ring">✳</div><span className="eyebrow">INCOMING SIGNAL / 001</span><strong>SPIDER-SENSE<br/><em>ACTIVATED</em></strong><button onClick={onDone}>SKIP INTRO ↗</button></div>
+}
+function Landing({ openAuth }) {
+  return <><section className="hero" id="top"><div className="hero-art" aria-hidden="true"><div className="moon"/><div className="web web-one"/><div className="web web-two"/><div className="skyline skyline-back"/><div className="skyline skyline-front"/><svg className="figure" viewBox="0 0 350 500" aria-hidden="true"><path d="M245 6 Q202 47 172 71 L147 125 Q127 130 120 151 L92 182 63 158 48 164 74 211 Q82 223 99 214 L128 196 153 247 118 286 65 318 32 384 50 397 91 347 145 332 169 317 194 340 229 390 271 411 282 397 254 373 242 326 217 280 205 250 221 202 228 165 248 127 276 83 320 39 309 28 264 62 219 99 220 70 256 17Z" fill="#090d15" stroke="#9e1d29" strokeWidth="3"/><path d="M128 122 Q125 89 154 76 Q185 73 194 97 L188 126 169 145 145 145Z" fill="#111723" stroke="#951e2b" strokeWidth="3"/><path d="M139 102 Q153 100 162 113 L145 114Z M172 112 Q182 99 188 103 L184 116Z" fill="#e7e9e8"/><path d="M152 148 L176 153 184 186 171 204 158 181Z" fill="#aa1a2b"/><path d="M165 161 L165 194 M151 167 L179 183 M179 164 L153 185" stroke="#1a1119" strokeWidth="3"/><path d="M153 245 Q177 252 205 250 M118 286 L145 310 M194 340 L215 335" fill="none" stroke="#39404c" strokeWidth="3"/></svg></div><div className="hero-content"><div className="eyebrow"><span className="live-dot"/> YOUR NEIGHBORHOOD NETWORK <span className="eyebrow-line"/> EST. FOR THE CITY</div><h1>YOUR CITY.<br/>YOUR <span>RESPONSIBILITY.</span></h1><p>Every alert matters. Every second counts.<br/>A signal for the city. A call for its heroes.</p><div className="hero-actions"><button className="btn primary" onClick={() => openAuth('register')}>REPORT AN INCIDENT <span>↗</span></button><button className="btn outline" onClick={() => openAuth('login')}>HERO LOGIN <span>↗</span></button></div><div className="hero-meta"><span>✳</span><div>THE CITY IS NEVER QUIET.<br/><b>NEITHER ARE WE.</b></div></div></div><div className="side-label">A SIGNAL FOR THE CITY &nbsp; / &nbsp; 001—003</div><div className="scroll-cue">↓ &nbsp; SCROLL TO EXPLORE</div></section><section className="how section" id="how"><div className="section-heading"><div><div className="eyebrow red">THE PROCESS / 01—03</div><h2>WHEN THE CITY CALLS,<br/><span>WE ANSWER.</span></h2></div><p>A simple signal can make all the difference.<br/>Here’s how the network works.</p></div><div className="steps">{[['01','REPORT','See something? Share the details securely with the network.','↗'],['02','RESPOND','Available heroes can claim an incident and take action.','⌁'],['03','RESOLVE','Follow the mission from the first report to resolution.','✓']].map(([n,title,desc,icon]) => <article className="step" key={n}><div className="step-top"><span>{n} / THE NETWORK</span><b>{icon}</b></div><h3>{title}<span>.</span></h3><p>{desc}</p><div className="step-bottom">SPIDER-SENSE <span>↗</span></div></article>)}</div></section><section className="about section" id="about"><div className="about-mark">✳</div><div><div className="eyebrow red">BUILT FOR THE NEIGHBORHOOD</div><h2>BE THE SIGNAL.<br/><span>MAKE A DIFFERENCE.</span></h2><p>Citizens report. Heroes respond. Every step stays connected.</p><button className="btn primary" onClick={() => openAuth('register')}>JOIN THE NETWORK <span>↗</span></button></div></section><Footer/></>
+}
+function Footer() { return <footer><Brand onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}/><span>FAN-MADE STUDENT PROJECT. NOT AFFILIATED WITH MARVEL.</span><span>DESIGNED FOR THE CITY &nbsp; ✳</span></footer> }
+function Auth({ mode, setMode, onAuth, onBack }) {
+  const [email,setEmail]=useState(''), [password,setPassword]=useState(''), [error,setError]=useState(''), [loading,setLoading]=useState(false)
+  async function submit(e) { e.preventDefault(); setError(''); setLoading(true); try { if(mode==='register') await request('/auth/register',{method:'POST',body:{email,password}}); const data=await request('/auth/login',{method:'POST',body:{email,password}}); const user=await request('/auth/me',{token:data.access_token}); onAuth(data.access_token,user) } catch(err) {setError(err.message)} finally {setLoading(false)} }
+  return <main className="auth-wrap"><button className="back" onClick={onBack}>← BACK TO HOME</button><div className="auth-grid"><div className="auth-copy"><div className="eyebrow red">YOUR SIGNAL STARTS HERE / 01</div><h1>THE CITY<br/>NEEDS <span>YOU.</span></h1><p>Every neighborhood has a hero.<br/>Let's get you connected.</p><div className="auth-graphic">✳</div></div><div className="auth-card"><div className="eyebrow red">ACCESS THE NETWORK</div><h2>{mode==='register'?'JOIN THE NETWORK':'WELCOME BACK'}</h2><p>{mode==='register'?'Create your citizen account.':'Log in with your citizen, hero, or command account.'}</p><form onSubmit={submit}><label>Email address<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label><label>Password<input type="password" required minLength={mode==='register'?8:undefined} autoComplete={mode==='register'?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters"/></label>{error && <div className="message error" role="alert">{error}</div>}<button className="btn primary full" disabled={loading}>{loading?'CONNECTING…':mode==='register'?'CREATE CITIZEN ACCOUNT':'LOG IN'} <span>↗</span></button></form><div className="auth-switch">{mode==='register'?'Already have an account?':'New to Spider-Sense?'} <button onClick={()=>{setError('');setMode(mode==='register'?'login':'register')}}>{mode==='register'?'LOG IN':'CREATE ACCOUNT'} →</button></div><p className="tiny">Hero and Command accounts are provisioned privately. This is a student project, not an emergency service.</p></div></div></main>
+}
+function ReportForm({ submit, busy, onCancel }) {
+ const [form,setForm]=useState(emptyForm); const set=(key,value)=>setForm(f=>({...f,[key]:value}));
+ return <section className="panel report-form"><div className="panel-heading"><div><div className="eyebrow red">NEW SIGNAL / CITIZEN REPORT</div><h2>REPORT AN INCIDENT</h2><p>Enter the details below. All fields are required.</p></div><button className="icon-button" onClick={onCancel} aria-label="Close form">×</button></div><form onSubmit={e=>{e.preventDefault();submit({...form,severity:Number(form.severity),latitude:Number(form.latitude),longitude:Number(form.longitude)})}}><div className="form-grid"><label className="wide">Incident title<input required minLength="3" maxLength="200" value={form.title} onChange={e=>set('title',e.target.value)} placeholder="What happened?"/></label><label className="wide">Description<textarea required minLength="10" value={form.description} onChange={e=>set('description',e.target.value)} placeholder="Describe the situation in at least 10 characters"/></label><label>Category<input required minLength="2" maxLength="50" value={form.category} onChange={e=>set('category',e.target.value)} placeholder="e.g. Fire, Accident"/></label><label>Severity<select value={form.severity} onChange={e=>set('severity',e.target.value)}>{[1,2,3,4,5].map(n=><option key={n} value={n}>{n} / 5</option>)}</select></label><label>Latitude<input required type="number" min="-90" max="90" step="any" value={form.latitude} onChange={e=>set('latitude',e.target.value)} placeholder="e.g. 21.1458"/></label><label>Longitude<input required type="number" min="-180" max="180" step="any" value={form.longitude} onChange={e=>set('longitude',e.target.value)} placeholder="e.g. 79.0882"/></label></div><button className="btn primary" disabled={busy}>{busy?'SENDING…':'SEND REPORT'} <span>↗</span></button></form></section>
+}
+function Dashboard({ user, token, onExpired }) {
+ const role=user.role; const [items,setItems]=useState([]), [mine,setMine]=useState([]), [loading,setLoading]=useState(true), [busy,setBusy]=useState(false), [error,setError]=useState(''), [notice,setNotice]=useState(''), [showForm,setShowForm]=useState(false), [selected,setSelected]=useState(null), [history,setHistory]=useState(null), [verify,setVerify]=useState(null), [filters,setFilters]=useState({status:'',category:'',severity:''}), [page,setPage]=useState(1), [total,setTotal]=useState(0), [pages,setPages]=useState(0), [tab,setTab]=useState('available')
+ function handleError(err) { if(err.status===401){onExpired();return} setError(err.message) }
+ async function load(signal) { setLoading(true); try { if(role==='hero') { const [available,own]=await Promise.all([request('/hero/incidents',{token,signal}),request('/hero/my-incidents',{token,signal})]); setItems(available);setMine(own); } else { const params=new URLSearchParams({page:String(page),page_size:'8'}); Object.entries(filters).forEach(([k,v])=>{if(v)params.set(k,v)});const result=await request(`${role==='citizen'?'/incidents':'/command/incidents'}?${params}`,{token,signal});setItems(result.items);setTotal(result.total);setPages(result.total_pages) } } catch(e){if(e.name!=='AbortError')handleError(e)} finally{if(!signal?.aborted)setLoading(false)} }
+ useEffect(()=>{const controller=new AbortController();load(controller.signal);return()=>controller.abort()},[token,role,page,filters.status,filters.category,filters.severity]) // eslint-disable-line react-hooks/exhaustive-deps
+ async function action(fn, success) {setBusy(true);setError('');setNotice('');try{await fn();setNotice(success);await load();}catch(e){handleError(e);if(e.status===409) await load()}finally{setBusy(false)}}
+ async function openDetails(incident) {setSelected(incident);setHistory(null);setVerify(null);setError(''); if(role==='hero'&&incident.hero_id!==user.id)return; try {const prefix=role==='citizen'?'/incidents':`/${role}/incidents`;setHistory(await request(`${prefix}/${incident.id}/history`,{token}))}catch(e){handleError(e)}}
+ async function actOnSelected(url, opts, text) { await action(async()=>{const updated=await request(url,{token,...opts});setSelected(updated);const h=await request(`/hero/incidents/${updated.id}/history`,{token});setHistory(h)},text) }
+ const shown=role==='hero'?(tab==='available'?items:mine):items
+ return <main className="dashboard"><div className="dash-top"><div><div className="eyebrow"><span className="live-dot"/> SECURE NETWORK / {role.toUpperCase()}</div><h1>{role==='citizen'?'YOUR REPORTS':role==='hero'?'PATROL CONSOLE':'COMMAND CENTER'}<span>.</span></h1><p>{role==='citizen'?'Your signal makes a difference. Track your reports here.':role==='hero'?'The city is calling. Find a mission and make your move.':'Monitor the network and review incident history.'}</p></div><div className="dash-top-actions"><span className="online">● &nbsp; AUTHENTICATED SESSION</span>{role==='citizen'&&<button className="btn primary" onClick={()=>{setShowForm(true);setSelected(null)}}>+ REPORT INCIDENT</button>}<button className="btn outline" onClick={()=>load()} disabled={loading}>↻ REFRESH</button></div></div>
+ {error&&<div className="message error" role="alert">{error} <button onClick={()=>setError('')}>×</button></div>}{notice&&<div className="message success" role="status">✳ &nbsp; {notice}<button onClick={()=>setNotice('')}>×</button></div>}
+ {showForm&&<ReportForm busy={busy} onCancel={()=>setShowForm(false)} submit={data=>action(async()=>{await request('/incidents',{token,method:'POST',body:data});setShowForm(false);setPage(1)},'REPORT RECEIVED. Your incident has been submitted.')}/>}
+ <div className="dash-layout"><section className="panel list-panel"><div className="panel-heading"><div><div className="eyebrow red">LIVE INCIDENT FEED</div><h2>{role==='citizen'?'MY INCIDENTS':role==='hero'?'MISSION BOARD':'ALL INCIDENTS'}</h2></div><span className="count">{role==='hero'?shown.length:total} RECORDS</span></div>{role==='hero'?<div className="tabs"><button className={tab==='available'?'active':''} onClick={()=>setTab('available')}>AVAILABLE <span>{items.length}</span></button><button className={tab==='mine'?'active':''} onClick={()=>setTab('mine')}>MY MISSIONS <span>{mine.length}</span></button></div>:<div className="filters"><label>Status<select value={filters.status} onChange={e=>{setPage(1);setFilters({...filters,status:e.target.value})}}><option value="">All statuses</option>{['reported','claimed','in_progress','resolved'].map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}</select></label><label>Category<input value={filters.category} onChange={e=>{setPage(1);setFilters({...filters,category:e.target.value})}} placeholder="All categories"/></label><label>Severity<select value={filters.severity} onChange={e=>{setPage(1);setFilters({...filters,severity:e.target.value})}}><option value="">All levels</option>{[1,2,3,4,5].map(n=><option key={n}>{n}</option>)}</select></label></div>}
+ {loading?<div className="empty">Connecting to the network…</div>:!shown.length?<div className="empty"><span>✳</span><b>NO INCIDENTS FOUND</b><p>{role==='hero'?'No missions in this view right now.':'No reports match this view yet.'}</p></div>:<div className="incident-list">{shown.map(i=><button key={i.id} className={`incident ${selected?.id===i.id?'selected':''}`} onClick={()=>openDetails(i)}><div className="incident-top"><span>INCIDENT / #{String(i.id).padStart(4,'0')}</span><span className={`severity sev-${i.severity}`}>◆ SEVERITY {i.severity}/5</span></div><div className="incident-title">{i.title} <span>↗</span></div><div className="incident-meta"><span>{i.category}</span><span className={`status ${i.status}`}>● {statusLabel(i.status)}</span><span>{time(i.created_at)}</span></div></button>)}</div>}
+ {role!=='hero'&&<div className="pagination"><span>PAGE {page} OF {Math.max(pages,1)}</span><div><button disabled={page<=1||loading} onClick={()=>setPage(page-1)}>← PREVIOUS</button><button disabled={page>=pages||loading} onClick={()=>setPage(page+1)}>NEXT →</button></div></div>}</section>
+ <aside className="panel detail-panel"><div className="panel-heading"><div><div className="eyebrow red">MISSION INTELLIGENCE</div><h2>INCIDENT DETAILS</h2></div><span className="detail-symbol">✳</span></div>{!selected?<div className="detail-empty"><div className="radar">✳</div><b>AWAITING A SIGNAL</b><p>Select an incident to view its details and progress.</p></div>:<><div className="detail-id">INCIDENT / #{String(selected.id).padStart(4,'0')}</div><h3>{selected.title}</h3><div className="detail-tags"><span className={`status ${selected.status}`}>● {statusLabel(selected.status)}</span><span className="severity">◆ SEVERITY {selected.severity}/5</span></div><p className="description">{selected.description}</p><dl><div><dt>CATEGORY</dt><dd>{selected.category}</dd></div><div><dt>LOCATION</dt><dd>{selected.latitude}, {selected.longitude}</dd></div><div><dt>REPORTED</dt><dd>{time(selected.created_at)}</dd></div>{role==='command'&&<div><dt>ASSIGNED HERO ID</dt><dd>{selected.hero_id??'Unassigned'}</dd></div>}</dl>{role==='hero'&&selected.status==='reported'&&selected.hero_id==null&&<button className="btn primary full" disabled={busy} onClick={()=>actOnSelected(`/hero/incidents/${selected.id}/claim`,{method:'POST'},'MISSION ACCEPTED. Incident claimed successfully.')}>CLAIM INCIDENT ↗</button>}{role==='hero'&&selected.hero_id===user.id&&['claimed','in_progress'].includes(selected.status)&&<button className="btn primary full" disabled={busy} onClick={()=>actOnSelected(`/hero/incidents/${selected.id}/status`,{method:'PATCH',body:{status:selected.status==='claimed'?'in_progress':'resolved'}},selected.status==='claimed'?'MISSION IN PROGRESS.':'MISSION RESOLVED.')}>{selected.status==='claimed'?'START RESPONSE':'MARK RESOLVED'} ↗</button>}<div className="history"><h4>STATUS HISTORY</h4>{role==='hero'&&selected.hero_id!==user.id?<p>History is available after you claim this incident.</p>:history===null?<p>Loading history…</p>:history.length?history.map(h=><div className="history-item" key={h.id}><span className="history-dot"/><div><b>{statusLabel(h.next_status)}</b><small>{time(h.created_at)} · Actor #{h.actor_id}</small>{h.note&&<p>{h.note}</p>}</div></div>):<p>No history available.</p>}</div>{role==='command'&&<><button className="btn outline full" disabled={busy} onClick={()=>action(async()=>setVerify(await request(`/command/incidents/${selected.id}/verify`,{token})),'Audit verification completed.')}>VERIFY AUDIT INTEGRITY ↗</button>{verify&&<p className="audit-result">{verify.verified?'✓ VERIFIED':'⚠ NOT VERIFIED'} — {verify.message||verify.reason}</p>}</>}</>}</aside></div></main>
+}
+export default function App() {
+ const [token,setToken]=useState(()=>sessionStorage.getItem('spider_token')||''),[user,setUser]=useState(null),[checking,setChecking]=useState(!!sessionStorage.getItem('spider_token')),[view,setView]=useState('home'),[mode,setMode]=useState('login'),[sessionMessage,setSessionMessage]=useState(''),[intro,setIntro]=useState(()=>!sessionStorage.getItem('spider_intro')&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+ useEffect(()=>{if(!token){setChecking(false);return}let active=true;request('/auth/me',{token}).then(u=>{if(active){setUser(u);setView('dashboard')}}).catch(e=>{if(active){if(e.status===401){sessionStorage.removeItem('spider_token');setToken('');setSessionMessage('Your session has expired. Please log in again.')}else setSessionMessage(e.message)}}).finally(()=>{if(active)setChecking(false)});return()=>{active=false}},[token])
+ function closeIntro(){sessionStorage.setItem('spider_intro','1');setIntro(false)}
+ function login(t,u){sessionStorage.setItem('spider_token',t);setUser(u);setToken(t);setView('dashboard');setSessionMessage('')}
+ function logout(expired=false){sessionStorage.removeItem('spider_token');setToken('');setUser(null);setView('home');if(expired)setSessionMessage('Your session has expired. Please log in again.')}
+ function openAuth(m){setMode(m);setView('auth');window.scrollTo(0,0)}
+ function home(){setView(user?'dashboard':'home')}
+ return <>{intro&&<Activation onDone={closeIntro}/>}<Nav user={user} onHome={home} onLogin={()=>openAuth('login')} onLogout={()=>logout()}/>{sessionMessage&&<div className="global-message" role="alert">{sessionMessage} <button onClick={()=>setSessionMessage('')}>×</button></div>}{checking?<div className="empty">Connecting to the network…</div>:view==='auth'?<Auth mode={mode} setMode={setMode} onAuth={login} onBack={()=>setView('home')}/>:user&&view==='dashboard'?<Dashboard user={user} token={token} onExpired={()=>logout(true)}/>:<Landing openAuth={openAuth}/>}</>
+}
