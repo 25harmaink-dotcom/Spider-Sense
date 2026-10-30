@@ -1,6 +1,6 @@
 # Spider-Sense frontend
 
-Cinematic, fan-made student project; not affiliated with Marvel. The artwork is original SVG/CSS inspired by the mood of the cited projects, not copied source or assets. Not a real emergency service.
+Cinematic, fan-made student project; not affiliated with Marvel. The landing artwork is cropped from the AI-generated concept previously selected for this project; no source or artwork was copied from the reference websites. Not a real emergency service.
 
 ## Start locally (macOS)
 
@@ -49,5 +49,7 @@ cd frontend && npm run build && npm run lint
 - Two role-scoped read routes were added: `GET /incidents/{id}/history` (reporting citizen) and `GET /hero/my-incidents` (claiming hero).
 - Command can view all incidents, history and verify the existing hash/HMAC audit; reassignment is not implemented by this backend.
 - JWT is stored in sessionStorage for this local student demo and expires according to the backend. JavaScript-accessible tokens are vulnerable to XSS; production needs a thorough security review and a suitable authentication/session design.
-- Online web fonts are optional; fallbacks are provided. No map or third-party artwork is required.
+- The Hero map shows the selected Available or My Missions list. The Command map shows the current filtered page, not every page at once. Map tiles come from OpenStreetMap and require internet access. Markers and incident data still come from the API; several incidents may overlap.
+- Citizen reporting uses a fixed list of New York areas. The chosen area stores an approximate representative coordinate, not an exact incident location. Older reports retain their original coordinates. This is not suitable for dispatch or emergencies.
+- Online web fonts are optional; fallbacks are provided.
 - The backend's SQLite database and this frontend are not hardened for real emergency or sensitive personal data.
