@@ -4,7 +4,7 @@ import IncidentMap from './IncidentMap'
 import { NYC_LOCATIONS, locationName } from './locations'
 
 const statusLabel = s => (s || '').replaceAll('_', ' ')
-const time = v => v ? new Date(v.endsWith('Z') ? v : v + 'Z').toLocaleString() : '—'
+const time = v => v ? new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(v) ? v : v + 'Z').toLocaleString() : '—'
 const emptyForm = { title: '', description: '', category: '', severity: '3', location: '' }
 
 async function request(path, { token, body, method = 'GET', signal } = {}) {

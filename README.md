@@ -103,3 +103,7 @@ The API documentation is the source of truth for current request and response sc
 This is a local learning/demo application, not a production emergency response system. The backend uses a local SQLite file, and deployment to an ephemeral filesystem can lose data. The current Vite proxy is for development and does not automatically configure a production host. Browser tokens in sessionStorage are vulnerable to XSS; a production release needs security review, appropriate session management, stronger operational protections, and persistent storage. Do not enter sensitive or real emergency information.
 
 The audit uses a hash chain and HMAC, not ECDSA or a blockchain. Successful verification checks integrity against the configured secret; it does not prove that a reported incident is true. The landing imagery is adapted from an AI-generated concept and the project used AI assistance during development.
+
+## Free demo deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the Render + Neon free-tier setup, limitations, and private Hero/Command provisioning. The deployment uses a new empty cloud database; local SQLite data is not migrated automatically.
